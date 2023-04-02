@@ -1,6 +1,7 @@
 library(tidyverse)
 library(lfe)
 library(lme4)
+library(plm)
 rm(list = ls())
 
 dat <- read.csv("Paterson (1991) primary-secondary.csv")
