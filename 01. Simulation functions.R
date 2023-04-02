@@ -16,9 +16,9 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   
   # coefficients
   gamma_w = ES*(sigma/X_sd)      
-  gamma_b_j = ES*(sigma/X_sd)      
-  gamma_b_k = ES*(sigma/X_sd)      
-  gamma_b_jk = ES*(sigma/X_sd)  
+  gamma_b_j = ES*(sqrt(tau_J00)/X_sd)      
+  gamma_b_k = ES*(sqrt(tau_K00)/X_sd)      
+  gamma_b_jk = ES*(sqrt(tau_JK0)/X_sd)  
   
   # data assignment
   dat <- 
@@ -224,7 +224,9 @@ cell_bw <- function(dat) {
   
   X_fit <- felm(X ~ 0 | schid + neighid + cellid, data = dat)
   dat$X_adapt_cell <- as.numeric(residuals(X_fit))
-  fit <- lmer(y ~ X_adapt_cell + cluster_neigh + cluster_school + cluster_cell + (1|neighid) + (1|schid) + (1|cellid), data = dat)
+  cluster_cell_fit <- felm(cluster_cell ~ 0 | schid + neighid, data = dat)
+  dat$cluster_cell_adapt <- as.numeric(residuals(cluster_cell_fit))
+  fit <- lmer(y ~ X_adapt_cell + cluster_neigh + cluster_school + cluster_cell_adapt + (1|neighid) + (1|schid) + (1|cellid), data = dat)
   fixed_est <- 
     coef(summary(fit)) %>% as_tibble(rownames = "cov") %>% 
     dplyr::select(cov, est = Estimate, se = `Std. Error`, pval = `Pr(>|t|)`) %>%
@@ -232,7 +234,7 @@ cell_bw <- function(dat) {
       cov = recode(cov, "X_adapt_cell" = "X",
                    "cluster_neigh" = "BW_N",
                    "cluster_school" = "BW_S",
-                   "cluster_int" = "BW_C"), 
+                   "cluster_cell_adapt" = "BW_C"), 
       method = "cell_bw",
       converged = (is.na(is.na(fit@optinfo$conv$lme4)[1]))
     ) %>% 
@@ -318,19 +320,8 @@ estimate <- function(dat) {
   return(results)
 }
 
-
 # Performance calculations ------------------------------------------------
 calc_performance <- function(results) {
-  
-  load("EScalc_param.RData")
-  
-  results <- results %>% 
-    left_join(param_list, 
-              by = c("method", "cov", "assumption", "ES", 
-                     "n_bar", "ICC_k", "ICC_jk")) %>% 
-    select(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk, param, param_est,
-           everything()) %>% 
-    mutate(param = ifelse(!is.na(param_est), param_est, param)) 
   
   abs_crit <- results %>% 
     group_by(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk) %>%
@@ -346,8 +337,9 @@ calc_performance <- function(results) {
   
   convergence <- results %>% 
     group_by(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk) %>% 
-    summarise(convergence_rate = sum(converged)/n(), .groups = "drop")
-  
+    summarise(convergence_rate = sum(converged)/n(), .groups = "drop",
+              neigh_n = mean(neigh_n),
+              neigh_pct = mean(neigh_pct))
   
   performance_measures <- 
     abs_crit %>% 
@@ -382,7 +374,8 @@ run_sim <- function(iterations,
         estimate()
     }) %>%
     bind_rows()
-
+  
+  
   # calc_performance(results)
 }
 
