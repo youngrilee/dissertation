@@ -47,11 +47,11 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   
   # neighborhood data
   # create between-neighborhood variance of X 
-  X_bw_neigh <- 
-    dat %>% 
-    group_by(neighid) %>% 
-    summarise() %>% 
-    mutate(X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd))
+  # X_bw_neigh <- 
+  #   dat %>% 
+  #   group_by(neighid) %>% 
+  #   summarise() %>% 
+  #   mutate(X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd))
   
   if (assumption == "exogeneity") {
     
@@ -59,8 +59,12 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     r <- 0.4 # correlation between X_bw_neigh and b_0j0
     
     neighbordata <-
-      X_bw_neigh %>% 
+      # X_bw_neigh %>% 
+      dat %>%
+      group_by(neighid) %>%
+      summarise() %>%
       mutate(
+        X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd),
         v_00k = rnorm(nrow(.), mean = 0, sd = sqrt((1 - r^2) * tau_K00)),
         c_00k = r * sqrt(tau_K00 / (X_sd ^ 2)) * X_bw_neigh + v_00k
       ) %>% 
@@ -70,9 +74,13 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     
     # neighborhood random effect when all assumptions are met:
     neighbordata <-
-      X_bw_neigh %>% 
+      # X_bw_neigh %>%
+      dat %>%
+      group_by(neighid) %>%
+      summarise() %>%
       mutate(
         c_00k = rnorm(nrow(.), mean = 0, sd = sqrt(tau_K00)),  
+        X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd)
       ) 
   }
   
@@ -137,7 +145,13 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     ungroup() %>%
     mutate(
       grand = mean(X),
-      param = gamma_w)
+      gamma = ES*(1/10),
+      ES_j = gamma_b_j*X_sd/sqrt(tau_J00),
+      ES_k = gamma_b_k*X_sd/sqrt(tau_K00),
+      ES_jk = gamma_b_jk*X_sd/sqrt(tau_JK0)
+    ) 
+  
+  
   
   return(dat)
 }
@@ -150,13 +164,20 @@ dat <- generate_dat(
   J = 20,              # school j = {1..J}
   n_bar = 10,          # average number of students per school
   ICC_k = 0.05,         # neighbor ICC
-  ICC_jk = 0.05         # neighbor ICC
+  ICC_jk = 0.01         # neighbor ICC
 )
 
 
-# calc correlations -------------------------------------------------------
+# calc ES -----------------------------------------------------------------
 cor_school <- function(dat) {
   
+  # coefficients
+  temp <- dat %>% 
+    mutate(gamma_b_j = ES * (1/10) * sd(X_bw_school) / sd(b_0j0))
+  mean(temp$gamma_b_j)
+  gamma_w = gamma_b_j = gamma_b_k = gamma_b_jk = dat$ES*(1/10)
+  
+  ES_j = gamma_b_j * X_sd / sqrt(tau_J00)
   cor_school <-
     dat %>% 
     group_by(schid) %>% 
@@ -197,12 +218,17 @@ cor_int <- function(dat) {
 # bind_results
 estimate <- function(dat) {
   
-  results <- bind_rows(
-    cor_school(dat),
-    cor_neigh(dat),
-    cor_int(dat)
-    ) %>% 
-    as_tibble() 
+  results <- dat %>% 
+    mutate(ES_j_est = gamma * sd(X_bw_school) / sd(b_0j0),
+           ES_k_est = gamma * sd(X_bw_neigh) / sd(c_00k),
+           ES_jk_est = gamma * sd(X_bw_int) / sd(d_0jk)) %>% 
+    summarise(ES_j = mean(ES_j),
+              ES_k = mean(ES_k),
+              ES_jk = mean(ES_jk),
+              ES_j_est = mean(ES_j_est),
+              ES_k_est = mean(ES_k_est),
+              ES_jk_est = mean(ES_jk_est)) %>% 
+  as_tibble() 
   
   return(results)
 }
@@ -261,7 +287,7 @@ results
 # simulation parameters as vectors/lists
 design_factors <- list(
   assumption = c("met", "exogeneity"),
-  ES = c(0.01, 0.03, 0.05),
+  ES = c(0.1, 0.3, 0.5),
   J = c(200),  # J = school
   n_bar = c(30, 100), 
   ICC_k = c(0.05, 0.15, 0.25), 
@@ -293,8 +319,17 @@ results
 
 # calc_cor ------------------------------------------------------------------
 calc_cor <- results %>% 
-  group_by(assumption, ES, n_bar, ICC_k, ICC_jk, cluster) %>% 
-  summarise(emp_rho = mean(rho)) %>% ungroup() 
+  group_by(assumption, ES, n_bar, ICC_k, ICC_jk) %>% 
+  summarise(ES_j = mean(ES_j),
+            ES_k = mean(ES_k),
+            ES_jk = mean(ES_jk),
+            ES_j_est = mean(ES_j_est),
+            ES_k_est = mean(ES_k_est),
+            ES_jk_est = mean(ES_jk_est)) %>% ungroup() %>% 
+  mutate(gamma = ES * 0.1) %>% 
+  select(assumption, ES, gamma, everything())
+  
+calc_cor
 
 write.csv(calc_cor, "calc_cor.csv", row.names = FALSE)
 save(results, file = "calc_cor_raw.RData")
