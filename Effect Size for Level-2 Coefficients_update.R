@@ -19,7 +19,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   ICC_j = 0.05        
   sparse = .1         
   X_m = 0
-  X_sd = sqrt(50)
+  X_sd = sqrt(25)
   K = J * 3.5
   
   # set sigma and random effects based on ICC
@@ -29,10 +29,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   sigma = sqrt(1-tau_J00-tau_K00-tau_JK0) 
   
   # coefficients
-  gamma_w = ES*(sigma/X_sd)
-  gamma_b_j = ES*(sqrt(tau_J00)/X_sd)      
-  gamma_b_k = ES*(sqrt(tau_K00)/X_sd)      
-  gamma_b_jk = ES*(sqrt(tau_JK0)/X_sd)  
+  gamma_w = gamma_b_j = gamma_b_k = gamma_b_jk = ES*(1/10)
   
   # data assignment
   dat <- 
