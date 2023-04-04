@@ -5,7 +5,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   ICC_j = 0.05        
   sparse = .1         
   X_m = 0
-  X_sd = sqrt(50)
+  X_sd = sqrt(25)
   K = J * 3.5
   
   # set sigma and random effects based on ICC
@@ -15,10 +15,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
   sigma = sqrt(1-tau_J00-tau_K00-tau_JK0) 
   
   # coefficients
-  gamma_w = ES*(sigma/X_sd)      
-  gamma_b_j = ES*(sqrt(tau_J00)/X_sd)      
-  gamma_b_k = ES*(sqrt(tau_K00)/X_sd)      
-  gamma_b_jk = ES*(sqrt(tau_JK0)/X_sd)  
+  gamma_w = gamma_b_j = gamma_b_k = gamma_b_jk = ES*(1/10) 
   
   # data assignment
   dat <- 
@@ -35,12 +32,6 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     ) 
   
   # neighborhood data
-  # create between-neighborhood variance of X 
-  X_bw_neigh <- 
-    dat %>% 
-    group_by(neighid) %>% 
-    summarise() %>% 
-    mutate(X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd))
   
   if (assumption == "exogeneity") {
     
@@ -48,8 +39,11 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     r <- 0.4 # correlation between X_bw_neigh and b_0j0
     
     neighbordata <-
-      X_bw_neigh %>% 
+      dat %>%
+      group_by(neighid) %>%
+      summarise() %>%
       mutate(
+        X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd),
         v_00k = rnorm(nrow(.), mean = 0, sd = sqrt((1 - r^2) * tau_K00)),
         c_00k = r * sqrt(tau_K00 / (X_sd ^ 2)) * X_bw_neigh + v_00k
       ) %>% 
@@ -59,9 +53,12 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     
     # neighborhood random effect when all assumptions are met:
     neighbordata <-
-      X_bw_neigh %>% 
+      dat %>%
+      group_by(neighid) %>%
+      summarise() %>%
       mutate(
         c_00k = rnorm(nrow(.), mean = 0, sd = sqrt(tau_K00)),  
+        X_bw_neigh = rnorm(nrow(.), mean = X_m, sd = X_sd)
       ) 
   }
   
@@ -126,7 +123,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     ungroup() %>%
     mutate(
       grand = mean(X),
-      param = gamma_w,
+      param = ES*(1/10),
       J = J)
   
   return(dat)
