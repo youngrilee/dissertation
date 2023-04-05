@@ -159,7 +159,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
 # test
 dat <- generate_dat(   
   # design factor
-  assumption = "exogeneity",   # exogeneity or met
+  assumption = "met",   # exogeneity or met
   ES = 0.5,
   J = 20,              # school j = {1..J}
   n_bar = 10,          # average number of students per school
@@ -172,46 +172,35 @@ dat <- generate_dat(
 cor_school <- function(dat) {
   
   # coefficients
-  temp <- dat %>% 
-    mutate(gamma_b_j = ES * (1/10) * sd(X_bw_school) / sd(b_0j0))
-  mean(temp$gamma_b_j)
-  gamma_w = gamma_b_j = gamma_b_k = gamma_b_jk = dat$ES*(1/10)
-  
-  ES_j = gamma_b_j * X_sd / sqrt(tau_J00)
   cor_school <-
-    dat %>% 
-    group_by(schid) %>% 
+    dat %>%
+    group_by(schid) %>%
     summarise(X_bw_school = mean(X_bw_school),
-              y_bw_school = mean(y)) 
-  cor_school <- 
-    data.frame(cluster = "BW_S", 
-               rho = cor(cor_school$X_bw_school, cor_school$y_bw_school))
+              y_bw_school = mean(y))
+  cor_school <- cor(cor_school$X_bw_school, cor_school$y_bw_school)
   return(cor_school)
 }
+
 
 cor_neigh <- function(dat) {
   
   cor_neigh <-
-    dat %>% 
-    group_by(neighid) %>% 
+    dat %>%
+    group_by(neighid) %>%
     summarise(X_bw_neigh = mean(X_bw_neigh),
-              y_bw_neigh = mean(y)) 
-  cor_neigh <- 
-    data.frame(cluster = "BW_N", 
-               rho = cor(cor_neigh$X_bw_neigh, cor_neigh$y_bw_neigh))
+              y_bw_neigh = mean(y))
+  cor_neigh <- cor(cor_neigh$X_bw_neigh, cor_neigh$y_bw_neigh)
   return(cor_neigh)
 }
 
 cor_int <- function(dat) {
   
   cor_int <-
-    dat %>% 
-    group_by(cellid) %>% 
+    dat %>%
+    group_by(cellid) %>%
     summarise(X_bw_int = mean(X_bw_int),
-              y_bw_int = mean(y)) 
-  cor_int <- 
-    data.frame(cluster = "BW_C", 
-               rho = cor(cor_int$X_bw_int, cor_int$y_bw_int))
+              y_bw_int = mean(y))
+  cor_int <- cor(cor_int$X_bw_int, cor_int$y_bw_int)
   return(cor_int)
 }
 
@@ -221,13 +210,19 @@ estimate <- function(dat) {
   results <- dat %>% 
     mutate(ES_j_est = gamma * sd(X_bw_school) / sd(b_0j0),
            ES_k_est = gamma * sd(X_bw_neigh) / sd(c_00k),
-           ES_jk_est = gamma * sd(X_bw_int) / sd(d_0jk)) %>% 
+           ES_jk_est = gamma * sd(X_bw_int) / sd(d_0jk),
+           cor_j = cor_school(dat),
+           cor_k = cor_neigh(dat),
+           cor_jk = cor_int(dat)) %>% 
     summarise(ES_j = mean(ES_j),
               ES_k = mean(ES_k),
               ES_jk = mean(ES_jk),
               ES_j_est = mean(ES_j_est),
               ES_k_est = mean(ES_k_est),
-              ES_jk_est = mean(ES_jk_est)) %>% 
+              ES_jk_est = mean(ES_jk_est),
+              cor_j = mean(cor_j),
+              cor_k = mean(cor_k),
+              cor_jk = mean(cor_jk)) %>% 
   as_tibble() 
   
   return(results)
@@ -239,9 +234,9 @@ estimate(dat = dat)
 results <-
   rerun(5, {
     dat <- generate_dat(   
-      assumption = "exogeneity",   # exogeneity or met
+      assumption = "met",   # exogeneity or met
       ES = 0.5,
-      J = 20,              # school j = {1..J}
+      J = 200,              # school j = {1..J}
       n_bar = 30,          # average number of students per school
       ICC_k = 0.05,         # neighbor ICC
       ICC_jk = 0.01         # neighbor ICC
@@ -277,7 +272,7 @@ results <-
   run_sim(iterations = 1,
           assumption = "met",   # exogeneity or met
           ES = 0.5,
-          J = 30,             # school j = {1..J}
+          J = 200,             # school j = {1..J}
           n_bar = 30,           # average number of students per school
           ICC_k = 0.15,         # neighbor ICC
           ICC_jk = 0.01,        # neighbor ICC
@@ -309,7 +304,7 @@ options(error=recover)
 plan("multisession") 
 
 system.time(
-  results <-
+  results_final <-
     params %>%
     mutate(res = future_pmap(., .f = run_sim, .options = furrr_options(seed=NULL))) %>% 
     unnest(cols = res)
@@ -318,21 +313,25 @@ system.time(
 results
 
 # calc_cor ------------------------------------------------------------------
-calc_cor <- results %>% 
+calc_cor <- results_final %>% 
   group_by(assumption, ES, n_bar, ICC_k, ICC_jk) %>% 
   summarise(ES_j = mean(ES_j),
             ES_k = mean(ES_k),
             ES_jk = mean(ES_jk),
             ES_j_est = mean(ES_j_est),
             ES_k_est = mean(ES_k_est),
-            ES_jk_est = mean(ES_jk_est)) %>% ungroup() %>% 
+            ES_jk_est = mean(ES_jk_est),
+            cor_j = mean(cor_j),
+            cor_k = mean(cor_k),
+            cor_jk = mean(cor_jk)) %>% ungroup() %>% 
   mutate(gamma = ES * 0.1) %>% 
-  select(assumption, ES, gamma, everything())
+  select(assumption, ES, gamma, everything()) %>% 
+  arrange(desc(assumption))
   
 calc_cor
 
 write.csv(calc_cor, "calc_cor.csv", row.names = FALSE)
-save(results, file = "calc_cor_raw.RData")
+save(results_final, file = "calc_cor_raw.RData")
 save(calc_cor, file = "calc_cor_emp.RData")
 
-# load("calc_cor_raw.RData")
+# load("calc_cor_raw_1000.RData")
