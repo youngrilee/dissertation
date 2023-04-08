@@ -282,17 +282,17 @@ results
 # simulation parameters as vectors/lists
 design_factors <- list(
   assumption = c("met", "exogeneity"),
-  ES = c(0.1, 0.3, 0.5),
+  ES = c(0.1, 0.2, 0.4),
   J = c(200),  # J = school
   n_bar = c(30, 100), 
   ICC_k = c(0.05, 0.15, 0.25), 
-  ICC_jk = c(0, 0.01, 0.05) 
+  ICC_jk = c(0, 0.05, 0.15) 
 )
 
 params <- 
   cross_df(design_factors) %>%
   mutate(
-    iterations = 10000, 
+    iterations = 6000, 
     seed = 20230129 + 1:n()
   )
 
@@ -310,7 +310,6 @@ system.time(
     unnest(cols = res)
 )
 
-results
 
 # calc_cor ------------------------------------------------------------------
 calc_cor <- results_final %>% 
