@@ -21,13 +21,13 @@ design_factors <- list(
   J = c(20, 70, 150),  # J = school
   n_bar = c(30, 100), 
   ICC_k = c(0.05, 0.15, 0.25), 
-  ICC_jk = c(0.01, 0.05) 
+  ICC_jk = c(0, 0.05, 0.15) 
 )
 
 params <- 
   cross_df(design_factors) %>%
   mutate(
-    iterations = 10, 
+    iterations = 1000, 
     seed = 20230129 + 1:n()
   )
   
@@ -53,11 +53,14 @@ system.time(
 results %>% filter(converged == TRUE) %>% 
   group_by(method, cov) %>% count() # 216 * N_iteration
 
-calc_performance(results) %>% View()
+load("EScalc_param.RData")
+
+results_raw <- results
+results <- calc_performance(results)
 
 #--------------------------------------------------------
 # Save results and details
 #--------------------------------------------------------
 session_info <- sessionInfo() 
 run_date <- date() 
-save(results, params, session_info, run_date, file = "sim_results_first1000.Rdata")
+save(results, params, session_info, run_date, file = "sim_results.Rdata")
