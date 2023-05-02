@@ -332,22 +332,14 @@ calc_performance <- function(results) {
     group_by(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk) %>%
     group_modify(~ calc_relative_var(.x, estimates = est, var_estimates = var))
   
-  convergence <- results %>% 
-    group_by(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk) %>% 
-    summarise(convergence_rate = sum(converged)/n(), .groups = "drop",
-              neigh_n = mean(neigh_n),
-              neigh_pct = mean(neigh_pct))
-  
   performance_measures <- 
     abs_crit %>% 
     left_join(rel_crit, 
               by = c("method", "cov", "assumption", "ES", "J", "n_bar",
-              "ICC_k", "ICC_jk", "K")) %>% 
+                     "ICC_k", "ICC_jk", "K")) %>% 
     left_join(rel_crit_val, 
               by = c("method", "cov", "assumption", "ES", "J", "n_bar",
-                                   "ICC_k", "ICC_jk", "K")) %>% 
-    left_join(convergence, by = c("method", "cov", "assumption", "ES", "J", "n_bar",
-                                  "ICC_k", "ICC_jk")) %>% 
+                     "ICC_k", "ICC_jk", "K")) %>% 
     rename(N = K)
   
   return(performance_measures)

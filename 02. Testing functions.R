@@ -43,7 +43,6 @@ hybrid_sch_fe(dat)
 hybrid_sch_re(dat)
 estimate(dat = dat) 
 
-# Performance calculations ------------------------------------------------
 results <-
   rerun(5, {
     dat <- generate_dat(   
@@ -60,11 +59,10 @@ results <-
 
 names(results)
 results
-calc_performance(results)
 
 # Simulation driver -------------------------------------------------------
 results <- 
-  run_sim(iterations = 10,
+  run_sim(iterations = 5,
           assumption = "met",   # exogeneity or met
           ES = 0.5,
           J = 20,              # school j = {1..J}
@@ -73,6 +71,49 @@ results <-
           ICC_jk = 0.01,         # neighbor ICC
           seed = NULL)
 
+# simulation parameters as vectors/lists
+design_factors <- list(
+  assumption = c("met"),
+  ES = c(0.01, 0.03),
+  J = c(70),  # J = school
+  n_bar = c(30), 
+  ICC_k = c(0.15), 
+  ICC_jk = c(0.01) 
+)
+
+params <- 
+  cross_df(design_factors) %>%
+  mutate(
+    iterations = 5, 
+    seed = 20230129 + 1:n()
+  )
+
+nrow(params)
+head(params)
+
+# pmap
+options(error=recover)
+plan("multisession") 
+
+system.time(
+  results <-
+    params %>%
+    mutate(res = future_pmap(., .f = run_sim, .options = furrr_options(seed=NULL))) %>% 
+    unnest(cols = res)
+)
+
+# Performance Criteria ----------------------------------------------------
+load("EScalc_param.RData")
+
+results <- results %>% 
+  left_join(param_list, 
+            by = c("method", "cov", "assumption", "ES", 
+                   "n_bar", "ICC_k", "ICC_jk")) %>% 
+  select(method, cov, assumption, ES, J, n_bar, ICC_k, ICC_jk, param, param_est,
+         everything()) %>% 
+  mutate(param = ifelse(!is.na(param_est), param_est, param)) 
+
+calc_performance(results)
 
 # Check "met" condition --------------------------------------------------------
 # model parameter fixed
