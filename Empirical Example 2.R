@@ -2,6 +2,7 @@ library(tidyverse)
 library(lfe)
 library(lme4)
 library(plm)
+library(insight)
 rm(list = ls())
 
 dat <- read.csv("Paterson (1991) primary-secondary.csv")
@@ -126,15 +127,31 @@ summary(CCREM_hybrid)
 CCREM_hybrid <- lmer(ATTAIN ~ VRQ + factor(SID) + (1 | PID), data = dat_cent)
 summary(CCREM_hybrid) 
 
-# Adaptive centering of VRQ
-# VRQ_fit <- felm(VRQ ~ 0 | SID, data = dat)
-# dat_cent$VRQ_adapt <- residuals(VRQ_fit)
-# CCREM_hybrid <- lmer(ATTAIN ~ VRQ_adapt + factor(PID) + (1 | SID), data = dat_cent)
-# summary(CCREM_hybrid) 
+# variance decomposition of p7read
+model <- lmer(ATTAIN ~ adapt_cell + (1 | PID) + (1 | SID) + (1 | cellid), data = dat_cent)
+summary(model)
 
-# Adaptive centering of VRQ
-# VRQ_fit <- felm(VRQ ~ 0 | PID + SID, data = dat)
-# dat_cent$VRQ_adapt <- residuals(VRQ_fit)
-# CCREM_hybrid <- lmer(ATTAIN ~ VRQ_adapt + factor(PID) + (1 | SID), data = dat_cent)
-# summary(CCREM_hybrid) 
+## f1
+gamma <- fixed.effects(model)["adapt_cell"] %>% as.numeric()
+cov <- dat_cent$adapt_cell %>% as.matrix()
+phi1 <- var(cov)
+f1 <- t(gamma) %*% phi1 %*% gamma # (gamma^2) * phi1
+## sch_var
+sch_var <- as.numeric(unlist(VarCorr(model))["PID"])
+## neigh_var
+neigh_var <- as.numeric(unlist(VarCorr(model))["SID"])
+## cell_var
+cell_var <- as.numeric(unlist(VarCorr(model))["cellid"])
+## sigma
+sigma <- sigma(model)^2
+## double-check
+get_variance(model)
+
+data.frame(
+  component = c("fixed", "school_random", "neighborhood_random", "cell_random", "residual"),
+  var = c(f1, sch_var, neigh_var, cell_var, sigma)) %>% 
+  mutate(total = sum(var),
+         var_pct = var / total,
+         var_pct = round(var_pct, 4))
+
 
