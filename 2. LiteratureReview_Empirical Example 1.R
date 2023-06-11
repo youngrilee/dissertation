@@ -129,29 +129,12 @@ summary(CCREM_hybrid)
 CCREM_hybrid <- lmer(attain ~ p7read + factor(neighid) + (1 | schid), data = dat_cent)
 summary(CCREM_hybrid) 
 
-# variance decomposition of p7read
-model <- lmer(attain ~ adapt_cell + (1 | schid) + (1 | neighid) + (1 | cellid), data = dat_cent)
-summary(model)
+# variance decomposition of the predictor: p7read
+## null
+fit <- lmer(p7read ~ (1 | schid) + (1 | neighid) + (1 | cellid), data = dat_cent)
+summary(fit)
 
-## f1
-gamma <- fixed.effects(model)["adapt_cell"] %>% as.numeric()
-cov <- dat_cent$adapt_cell %>% as.matrix()
-phi1 <- var(cov)
-f1 <- t(gamma) %*% phi1 %*% gamma # (gamma^2) * phi1
-## sch_var
-sch_var <- as.numeric(unlist(VarCorr(model))["schid"])
-## neigh_var
-neigh_var <- as.numeric(unlist(VarCorr(model))["neighid"])
-## cell_var
-cell_var <- as.numeric(unlist(VarCorr(model))["cellid"])
-## sigma
-sigma <- sigma(model)^2
-## double-check
-get_variance(model)
-
-data.frame(
-  component = c("fixed", "school_random", "neighborhood_random", "cell_random", "residual"),
-  var = c(f1, sch_var, neigh_var, cell_var, sigma)) %>% 
-  mutate(total = sum(var),
-         var_pct = var / total,
-         var_pct = round(var_pct, 4))
+VarCorr(fit) %>% as_tibble() %>% 
+  mutate(total = sum(vcov),
+         iucc = 100*(vcov/total)) %>% 
+  dplyr::select(grp, vcov, total, iucc)

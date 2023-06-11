@@ -142,16 +142,7 @@ generate_dat <- function(assumption, ES, J, n_bar, ICC_k, ICC_jk){
     mutate(cluster_school = mean(X)) %>%
     group_by(neighid) %>%
     mutate(cluster_neigh = mean(X)) %>% 
-    ungroup() %>%
-    mutate(
-      grand = mean(X),
-      gamma = ES*(1/10),
-      ES_j = gamma_b_j*X_sd/sqrt(tau_J00),
-      ES_k = gamma_b_k*X_sd/sqrt(tau_K00),
-      ES_jk = gamma_b_jk*X_sd/sqrt(tau_JK0)
-    ) 
-  
-  
+    ungroup() 
   
   return(dat)
 }
@@ -168,63 +159,15 @@ dat <- generate_dat(
 )
 
 
-# calc ES -----------------------------------------------------------------
-cor_school <- function(dat) {
-  
-  # coefficients
-  cor_school <-
-    dat %>%
-    group_by(schid) %>%
-    summarise(X_bw_school = mean(X_bw_school),
-              y_bw_school = mean(y))
-  cor_school <- cor(cor_school$X_bw_school, cor_school$y_bw_school)
-  return(cor_school)
-}
+data.frame(cor_s_c = cor(dat$cluster_school, dat$cell_mean),
+           cor_n_c = cor(dat$cluster_neigh, dat$cell_mean))
 
-
-cor_neigh <- function(dat) {
-  
-  cor_neigh <-
-    dat %>%
-    group_by(neighid) %>%
-    summarise(X_bw_neigh = mean(X_bw_neigh),
-              y_bw_neigh = mean(y))
-  cor_neigh <- cor(cor_neigh$X_bw_neigh, cor_neigh$y_bw_neigh)
-  return(cor_neigh)
-}
-
-cor_int <- function(dat) {
-  
-  cor_int <-
-    dat %>%
-    group_by(cellid) %>%
-    summarise(X_bw_int = mean(X_bw_int),
-              y_bw_int = mean(y))
-  cor_int <- cor(cor_int$X_bw_int, cor_int$y_bw_int)
-  return(cor_int)
-}
-
+# calc cor -----------------------------------------------------------------
 # bind_results
 estimate <- function(dat) {
   
-  results <- dat %>% 
-    mutate(ES_j_est = gamma * sd(X_bw_school) / sd(b_0j0),
-           ES_k_est = gamma * sd(X_bw_neigh) / sd(c_00k),
-           ES_jk_est = gamma * sd(X_bw_int) / sd(d_0jk),
-           cor_j = cor_school(dat),
-           cor_k = cor_neigh(dat),
-           cor_jk = cor_int(dat)) %>% 
-    summarise(ES_j = mean(ES_j),
-              ES_k = mean(ES_k),
-              ES_jk = mean(ES_jk),
-              ES_j_est = mean(ES_j_est),
-              ES_k_est = mean(ES_k_est),
-              ES_jk_est = mean(ES_jk_est),
-              cor_j = mean(cor_j),
-              cor_k = mean(cor_k),
-              cor_jk = mean(cor_jk)) %>% 
-  as_tibble() 
-  
+  results <- data.frame(cor_s_c = cor(dat$cluster_school, dat$cell_mean),
+                    cor_n_c = cor(dat$cluster_neigh, dat$cell_mean))
   return(results)
 }
 
@@ -283,7 +226,7 @@ results
 design_factors <- list(
   assumption = c("met", "exogeneity"),
   ES = c(0.1, 0.2, 0.4),
-  J = c(200),  # J = school
+  J = c(20, 70, 150),  # J = school
   n_bar = c(30, 100), 
   ICC_k = c(0.05, 0.15, 0.25), 
   ICC_jk = c(0, 0.05, 0.15) 
@@ -292,7 +235,7 @@ design_factors <- list(
 params <- 
   cross_df(design_factors) %>%
   mutate(
-    iterations = 6000, 
+    iterations = 1000, 
     seed = 20230129 + 1:n()
   )
 
@@ -310,27 +253,60 @@ system.time(
     unnest(cols = res)
 )
 
+save(results_final, file = "cor_multicollinearity.RData")
 
-# calc_cor ------------------------------------------------------------------
-calc_cor <- results_final %>% 
-  group_by(assumption, ES, n_bar, ICC_k, ICC_jk) %>% 
-  summarise(ES_j = mean(ES_j),
-            ES_k = mean(ES_k),
-            ES_jk = mean(ES_jk),
-            ES_j_est = mean(ES_j_est),
-            ES_k_est = mean(ES_k_est),
-            ES_jk_est = mean(ES_jk_est),
-            cor_j = mean(cor_j),
-            cor_k = mean(cor_k),
-            cor_jk = mean(cor_jk)) %>% ungroup() %>% 
-  mutate(gamma = ES * 0.1) %>% 
-  select(assumption, ES, gamma, everything()) %>% 
-  arrange(desc(assumption))
-  
-calc_cor
 
-write.csv(calc_cor, "calc_cor.csv", row.names = FALSE)
-save(results_final, file = "calc_cor_raw.RData")
-save(calc_cor, file = "calc_cor_emp.RData")
 
-# load("calc_cor_raw_1000.RData")
+
+
+
+# descriptive stat --------------------------------------------------------
+rm(list = ls())
+load("cor_multicollinearity.RData")
+
+summary(results_final$cor_s_c)
+summary(results_final$cor_n_c)
+
+
+# anova -------------------------------------------------------------------
+library(sjstats)
+fit1 <- aov(cor_s_c ~ as.factor(assumption)+as.factor(ES)+as.factor(J) + as.factor(n_bar)+as.factor(ICC_k)+as.factor(ICC_jk), 
+            data = results_final)
+anova_stats(fit1) %>% as_tibble %>% 
+  select(term, partial.etasq) %>% 
+  mutate(size = ifelse(partial.etasq >= 0.14, "(large)", NA),
+         size = ifelse(partial.etasq >= 0.06 & partial.etasq < 0.14, "(medium)", size),
+         size = ifelse(partial.etasq >= 0.01 & partial.etasq < 0.06, "(small)", size)) %>% 
+  mutate_if(is.numeric, round, 3) 
+
+fit1 <- aov(cor_n_c ~ as.factor(assumption)+as.factor(ES)+as.factor(J) + as.factor(n_bar)+as.factor(ICC_k)+as.factor(ICC_jk), 
+            data = results_final)
+anova_stats(fit1) %>% as_tibble %>% 
+  select(term, partial.etasq) %>% 
+  mutate(size = ifelse(partial.etasq >= 0.14, "(large)", NA),
+         size = ifelse(partial.etasq >= 0.06 & partial.etasq < 0.14, "(medium)", size),
+         size = ifelse(partial.etasq >= 0.01 & partial.etasq < 0.06, "(small)", size)) %>% 
+  mutate_if(is.numeric, round, 3) 
+
+
+
+# graph -------------------------------------------------------------------
+cor <- results_final %>% 
+  select(-c(iterations, seed)) %>% 
+  pivot_longer(7:8, names_to = "cor_type", values_to = "cor") %>% 
+  mutate(J = as.factor(J),
+         cor_type = ifelse(cor_type == "cor_s_c", "School", "Neighborhood"),
+         cor_type = factor(cor_type, levels = c("School", "Neighborhood"))) %>% 
+  ggplot(aes(x = J, y = cor, fill = cor_type, color = cor_type)) + 
+  geom_boxplot(alpha = .7, lwd = .1) +
+  labs(x = "The Number of Schools", y = "Correlation") + 
+  theme_bw() +
+  # scale_y_continuous(limits = c(0, 1)) +
+  theme(text = element_text(size = 13),
+        legend.title = element_blank(),
+        legend.position = "bottom",
+        plot.caption=element_text(hjust = 0)) 
+
+png("Figures/multicollinearity.png", units="in", width=9, height=4, res=300)
+cor
+dev.off()
